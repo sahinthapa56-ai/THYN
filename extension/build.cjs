@@ -4,17 +4,16 @@ const path = require("path");
 
 const DIST = path.resolve(__dirname, "dist");
 
-// Clean dist
 fs.rmSync(DIST, { recursive: true, force: true });
 fs.mkdirSync(DIST, { recursive: true });
 
-// ── 1. Bundle popup (React → single IIFE file, no modules) ──
+// 1. Bundle popup
 esbuild.buildSync({
   entryPoints: ["src/popup/popup.tsx"],
   bundle: true,
   format: "iife",
   target: "chrome109",
-  outfile: "dist/popup.bundle.js",
+  outfile: path.join(DIST, "popup.bundle.js"),
   jsx: "automatic",
   loader: { ".tsx": "tsx", ".ts": "ts" },
   define: {
@@ -23,13 +22,13 @@ esbuild.buildSync({
   },
 });
 
-// ── 2. Bundle sidepanel (React → single IIFE file, no modules) ──
+// 2. Bundle sidepanel
 esbuild.buildSync({
   entryPoints: ["src/sidepanel/sidepanel.tsx"],
   bundle: true,
   format: "iife",
   target: "chrome109",
-  outfile: "dist/sidepanel.bundle.js",
+  outfile: path.join(DIST, "sidepanel.bundle.js"),
   jsx: "automatic",
   loader: { ".tsx": "tsx", ".ts": "ts" },
   define: {
@@ -38,17 +37,15 @@ esbuild.buildSync({
   },
 });
 
-// ── 3. Copy background & content scripts (no modification needed) ──
+// 3. Background & content scripts
 esbuild.buildSync({
   entryPoints: ["src/background/background.ts"],
   bundle: true,
   format: "iife",
   target: "chrome109",
-  outfile: "dist/background.js",
+  outfile: path.join(DIST, "background.js"),
   loader: { ".ts": "ts" },
-  define: {
-    "process.env.NODE_ENV": '"production"',
-  },
+  define: { "process.env.NODE_ENV": '"production"' },
 });
 
 esbuild.buildSync({
@@ -56,58 +53,37 @@ esbuild.buildSync({
   bundle: true,
   format: "iife",
   target: "chrome109",
-  outfile: "dist/content.js",
+  outfile: path.join(DIST, "content.js"),
   loader: { ".ts": "ts" },
-  define: {
-    "process.env.NODE_ENV": '"production"',
-  },
+  define: { "process.env.NODE_ENV": '"production"' },
 });
 
-// ── 4. Generate HTML files with non-module scripts ──
-const html = (title, bundle) => `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>${title}</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script src="/${bundle}"></script>
-  </body>
-</html>`;
+// 4. Generate HTML files
+var mkHtml = function(title, bundle) {
+  return '<!doctype html>\n<html lang="en">\n  <head>\n    <meta charset="UTF-8" />\n    <meta name="viewport" content="width=device-width, initial-scale=1.0" />\n    <title>' + title + '</title>\n    <link rel="stylesheet" href="/extension.css" />\n  </head>\n  <body>\n    <div id="root"></div>\n    <script src="/' + bundle + '"></script>\n  </body>\n</html>';
+};
 
-fs.mkdirSync(path.join(DIST, "src", "popup"), { recursive: true });
-fs.mkdirSync(path.join(DIST, "src", "sidepanel"), { recursive: true });
+var distPopupHtml = path.join(DIST, "src", "popup");
+var distSidepanelHtml = path.join(DIST, "src", "sidepanel");
+fs.mkdirSync(distPopupHtml, { recursive: true });
+fs.mkdirSync(distSidepanelHtml, { recursive: true });
 
-fs.writeFileSync(
-  path.join(DIST, "src", "popup", "popup.html"),
-  html("THYN", "popup.bundle.js")
-);
-fs.writeFileSync(
-  path.join(DIST, "src", "sidepanel", "sidepanel.html"),
-  html("THYN", "sidepanel.bundle.js")
-);
+fs.writeFileSync(path.join(distPopupHtml, "popup.html"), mkHtml("THYN", "popup.bundle.js"));
+fs.writeFileSync(path.join(distSidepanelHtml, "sidepanel.html"), mkHtml("THYN", "sidepanel.bundle.js"));
 
-// ── 5. Copy manifest and icons ──
-fs.copyFileSync(
-  path.join(__dirname, "manifest.json"),
-  path.join(DIST, "manifest.json")
-);
-fs.cpSync(
-  path.join(__dirname, "public", "icons"),
-  path.join(DIST, "icons"),
-  { recursive: true }
-);
+// 5. Copy manifest, icons, CSS
+fs.copyFileSync(path.join(__dirname, "manifest.json"), path.join(DIST, "manifest.json"));
+fs.cpSync(path.join(__dirname, "public", "icons"), path.join(DIST, "icons"), { recursive: true });
+fs.copyFileSync(path.join(__dirname, "src", "extension.css"), path.join(DIST, "extension.css"));
 
-// ── 6. Verify ──
-const files = fs.readdirSync(DIST, { recursive: true });
+// 6. Verify
+var files = fs.readdirSync(DIST, { recursive: true });
 console.log("Built files:");
 files
-  .filter((f) => fs.statSync(path.join(DIST, f)).isFile())
-  .forEach((f) => {
-    const size = fs.statSync(path.join(DIST, f)).size;
-    console.log(`  ${f} (${(size / 1024).toFixed(1)} KB)`);
+  .filter(function(f) { return fs.statSync(path.join(DIST, f)).isFile(); })
+  .forEach(function(f) {
+    var size = fs.statSync(path.join(DIST, f)).size;
+    console.log("  " + f + " (" + (size / 1024).toFixed(1) + " KB)");
   });
 
-console.log("\n✓ Extension build complete!");
+console.log("\nBuild complete!");
