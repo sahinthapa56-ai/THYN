@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: thyn-api
+    env: node
+    region: oregon
+    plan: free
+    rootDir: backend
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: SUPABASE_URL
+        value: https://amececmzgwkoxboaebft.supabase.co
+      - key: SUPABASE_ANON_KEY
+        value: sb_publishable_WW0RZyNvYBgOHEmjTsFquQ_Gg0HwTeY
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      - key: PORT
+        value: 3001
+      - key: NODE_ENV
+        value: production
