@@ -1,374 +1,379 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { motion, AnimatePresence } from "framer-motion";
-import {
-  Sparkles, Bookmark, CheckSquare, Mail, Share2, Settings,
-  Plus, Search, Clock, TrendingUp, FileText, MessageSquare,
-  Layout, Layers, Zap, Sun, Moon
-} from "lucide-react";
 
-type TabType = "workspace" | "captures" | "tasks" | "templates";
-type ViewType = "summary" | "tasks" | "email" | "flashcards";
-
-interface Capture {
-  id: string;
-  url: string;
-  title: string;
-  text?: string;
-  selection?: string;
-  description?: string;
-  capturedAt: number;
-  source?: string;
-  summary?: string;
-  tasks?: string[];
+// ── Types ──────────────────────────────────────────────────
+interface LinkedInProfile {
+  name: string;
+  headline: string | null;
+  company: string | null;
+  position: string | null;
+  location: string | null;
+  linkedinUrl: string;
+  avatarUrl: string | null;
+  summary: string | null;
 }
 
-function SidePanel() {
-  const [activeTab, setActiveTab] = React.useState<TabType>("workspace");
-  const [capture, setCapture] = React.useState<any>(null);
-  const [summary, setSummary] = React.useState<any>(null);
-  const [loading, setLoading] = React.useState(false);
-  const [darkMode, setDarkMode] = React.useState(true);
+interface Note {
+  id: string;
+  content: string;
+  createdAt: string;
+}
 
+interface Reminder {
+  id: string;
+  title: string;
+  note: string | null;
+  dueAt: string;
+  done: boolean;
+}
+
+// ── API ────────────────────────────────────────────────────
+const API_BASE = "http://localhost:3001";
+
+async function getToken(): Promise<string | null> {
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage({ type: "GET_TOKEN" }, (res) => {
+      resolve(res?.token || null);
+    });
+  });
+}
+
+async function api(path: string, options: RequestInit = {}) {
+  const token = await getToken();
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...((options.headers as Record<string, string>) || {}),
+    },
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body?.error || `API ${res.status}`);
+  }
+  return res.json();
+}
+
+// ── Side Panel Component ───────────────────────────────────
+function SidePanel() {
+  const [profile, setProfile] = React.useState<LinkedInProfile | null>(null);
+  const [contact, setContact] = React.useState<any>(null);
+  const [notes, setNotes] = React.useState<Note[]>([]);
+  const [reminders, setReminders] = React.useState<Reminder[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [saving, setSaving] = React.useState(false);
+  const [noteInput, setNoteInput] = React.useState("");
+  const [token, setToken] = React.useState<string | null>(null);
+  const [showSettings, setShowSettings] = React.useState(false);
+  const [tokenInput, setTokenInput] = React.useState("");
+
+  // Load token and profile on mount
   React.useEffect(() => {
-    chrome.storage.local.get(["lastCapture", "lastSummary"], (data) => {
-      if (data.lastCapture) setCapture(data.lastCapture);
-      if (data.lastSummary) setSummary(data.lastSummary);
+    getToken().then((t) => {
+      setToken(t);
+      if (!t) {
+        setLoading(false);
+        return;
+      }
+
+      // Load LinkedIn profile from storage
+      chrome.storage.local.get("linkedinProfile", (data) => {
+        const p = data.linkedinProfile as LinkedInProfile;
+        setProfile(p || null);
+        setLoading(false);
+
+        // If we have a profile, check if contact exists
+        if (p?.linkedinUrl) {
+          loadContact(p.linkedinUrl, t);
+        }
+      });
     });
   }, []);
 
-  async function handleCapture() {
-    setLoading(true);
-    const res = await chrome.runtime.sendMessage({ type: "CAPTURE_PAGE" });
-    if (res?.data) setCapture(res.data);
-    setLoading(false);
+  async function loadContact(linkedinUrl: string, token: string) {
+    try {
+      const data = await api(`/contacts?linkedinUrl=${encodeURIComponent(linkedinUrl)}`);
+      // Try to find matching contact
+      if (data.contacts?.length) {
+        const match = data.contacts.find(
+          (c: any) => c.linkedinUrl === linkedinUrl
+        );
+        if (match) {
+          setContact(match);
+          // Load notes and reminders
+          const notesData = await api(`/notes/contact/${match.id}`);
+          setNotes(notesData.notes);
+          const remindersData = await api(`/reminders?contactId=${match.id}`);
+          setReminders(remindersData.reminders);
+        }
+      }
+    } catch {
+      // Contact doesn't exist yet — that's fine
+    }
   }
 
-  async function handleSummarize() {
-    setLoading(true);
-    const res = await chrome.runtime.sendMessage({ type: "SUMMARIZE_PAGE" });
-    if (res?.data) setSummary(res.data);
-    setLoading(false);
+  async function handleSaveContact() {
+    if (!profile || !token) return;
+    setSaving(true);
+    try {
+      const data = await api("/contacts", {
+        method: "POST",
+        body: JSON.stringify({
+          linkedinUrl: profile.linkedinUrl,
+          name: profile.name,
+          headline: profile.headline,
+          company: profile.company,
+          position: profile.position,
+          location: profile.location,
+          avatarUrl: profile.avatarUrl,
+          summary: profile.summary,
+        }),
+      });
+      setContact(data.contact);
+    } catch (err: any) {
+      if (err.message?.includes("409") || err.message?.includes("already exists")) {
+        // Contact already exists — reload
+        loadContact(profile.linkedinUrl, token);
+      }
+    }
+    setSaving(false);
   }
 
-  async function handleAction(action: string) {
-    setLoading(true);
-    const res = await chrome.runtime.sendMessage({ type: action });
-    setLoading(false);
+  async function handleAddNote() {
+    if (!noteInput.trim() || !contact || !token) return;
+    try {
+      const data = await api("/notes", {
+        method: "POST",
+        body: JSON.stringify({
+          contactId: contact.id,
+          content: noteInput.trim(),
+        }),
+      });
+      setNotes((prev) => [data.note, ...prev]);
+      setNoteInput("");
+    } catch (e) {
+      console.error("Failed to add note", e);
+    }
   }
 
-  return (
-    <div className={`h-screen flex ${darkMode ? "bg-thyn-bg" : "bg-white"} text-thyn-text overflow-hidden`}>
-      {/* Left Sidebar */}
-      <aside className="w-16 flex flex-col items-center py-4 gap-4 border-r border-thyn-border bg-thyn-surface/20 backdrop-blur-2xl">
+  async function handleSaveToken() {
+    if (!tokenInput.trim()) return;
+    await chrome.storage.local.set({ thyn_token: tokenInput.trim() });
+    setToken(tokenInput.trim());
+    setShowSettings(false);
+    // Reload profile
+    chrome.storage.local.get("linkedinProfile", (data) => {
+      const p = data.linkedinProfile as LinkedInProfile;
+      setProfile(p || null);
+      if (p?.linkedinUrl) loadContact(p.linkedinUrl, tokenInput.trim());
+    });
+  }
+
+  // ── Render ──────────────────────────────────────────
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-full p-6">
+        <div className="animate-spin w-6 h-6 border-2 border-white/20 border-t-white rounded-full" />
+      </div>
+    );
+  }
+
+  if (!token) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full p-6 gap-4 text-center">
+        <div className="text-3xl">🔑</div>
+        <p className="text-sm text-white/60">
+          Sign in to use THYN
+        </p>
+        <p className="text-xs text-white/40">
+          Open the THYN web dashboard, go to Settings, and copy your access token.
+        </p>
         <button
-          onClick={() => setDarkMode(!darkMode)}
-          className="p-2 rounded-xl hover:bg-thyn-surface transition-colors"
+          className="mt-2 px-4 py-2 rounded-lg bg-white text-black text-sm font-medium"
+          onClick={() => setShowSettings(true)}
         >
-          {darkMode ? <Sun size={18} /> : <Moon size={18} />}
+          Enter Token
         </button>
-        <NavIcon icon={Layout} active={activeTab === "workspace"} onClick={() => setActiveTab("workspace")} />
-        <NavIcon icon={Bookmark} active={activeTab === "captures"} onClick={() => setActiveTab("captures")} />
-        <NavIcon icon={CheckSquare} active={activeTab === "tasks"} onClick={() => setActiveTab("tasks")} />
-        <NavIcon icon={FileText} active={activeTab === "templates"} onClick={() => setActiveTab("templates")} />
-        <div className="flex-1" />
-        <button
-          onClick={() => chrome.runtime.openOptionsPage()}
-          className="p-2 rounded-xl hover:bg-thyn-surface transition-colors"
-        >
-          <Settings size={18} />
-        </button>
-      </aside>
 
-      {/* Main Content */}
-      <main className="flex-1 flex flex-col overflow-hidden">
-        {/* Top Bar */}
-        <header className="px-5 py-3 flex items-center justify-between border-b border-thyn-border bg-thyn-surface/10 backdrop-blur-xl">
-          <div className="flex items-center gap-3">
-            <span className="text-lg font-semibold tracking-tight">THYN</span>
-            <span className="text-[10px] uppercase tracking-widest text-thyn-muted bg-thyn-surface px-2 py-0.5 rounded-full border border-thyn-border">
-              Workspace
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
+        {showSettings && (
+          <div className="w-full mt-4 p-3 rounded-xl bg-white/5 border border-white/10 space-y-2">
+            <input
+              type="text"
+              placeholder="Paste your access token"
+              value={tokenInput}
+              onChange={(e) => setTokenInput(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-white outline-none focus:border-white/25 placeholder:text-white/30"
+            />
             <button
-              onClick={handleCapture}
-              disabled={loading}
-              className="px-3 py-1.5 text-xs font-medium rounded-xl bg-thyn-primary/20 text-thyn-primary border border-thyn-primary/20 hover:bg-thyn-primary/30 transition-all"
+              onClick={handleSaveToken}
+              disabled={!tokenInput.trim()}
+              className="w-full py-2 rounded-lg bg-white text-black text-sm font-medium disabled:opacity-30"
             >
-              {loading ? "..." : "+ Capture"}
+              Save Token
             </button>
           </div>
-        </header>
-
-        {/* Content Area */}
-        <div className="flex-1 overflow-y-auto p-5">
-          <AnimatePresence mode="wait">
-            {activeTab === "workspace" && (
-              <WorkspaceView
-                capture={capture}
-                summary={summary}
-                loading={loading}
-                onSummarize={handleSummarize}
-                onAction={handleAction}
-              />
-            )}
-            {activeTab === "captures" && <CapturesView />}
-            {activeTab === "tasks" && <TasksView />}
-            {activeTab === "templates" && <TemplatesView />}
-          </AnimatePresence>
-        </div>
-      </main>
-    </div>
-  );
-}
-
-function NavIcon({ icon: Icon, active, onClick }: { icon: any; active: boolean; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`p-2.5 rounded-xl transition-all ${
-        active
-          ? "bg-thyn-primary/20 text-thyn-primary shadow-glass-sm"
-          : "text-thyn-muted hover:text-thyn-text hover:bg-thyn-surface"
-      }`}
-    >
-      <Icon size={20} />
-    </button>
-  );
-}
-
-function WorkspaceView({
-  capture,
-  summary,
-  loading,
-  onSummarize,
-  onAction,
-}: {
-  capture: any;
-  summary: any;
-  loading: boolean;
-  onSummarize: () => void;
-  onAction: (action: string) => void;
-}) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -12 }}
-      className="space-y-4"
-    >
-      {/* Current Page Card */}
-      <GlassCard>
-        <div className="flex items-start gap-3 mb-4">
-          <div className="w-10 h-10 rounded-xl bg-thyn-primary/20 flex items-center justify-center flex-shrink-0">
-            <Zap size={20} className="text-thyn-primary" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <h2 className="text-sm font-semibold truncate">
-              {capture?.title || "No page captured yet"}
-            </h2>
-            <p className="text-xs text-thyn-muted truncate mt-0.5">
-              {capture?.url || "Capture a page to get started"}
-            </p>
-          </div>
-        </div>
-
-        {!capture && (
-          <button
-            onClick={onSummarize}
-            disabled={loading}
-            className="w-full p-3 rounded-2xl bg-thyn-primary/20 text-thyn-primary border border-thyn-primary/20 text-sm font-medium hover:bg-thyn-primary/30 transition-all"
-          >
-            {loading ? "Processing..." : "Capture Current Page"}
-          </button>
-        )}
-
-        {capture && (
-          <div className="flex gap-2 flex-wrap">
-            <ActionChip icon={Sparkles} label="Summarize" onClick={onSummarize} loading={loading} />
-            <ActionChip icon={CheckSquare} label="Tasks" onClick={() => onAction("EXTRACT_TASKS")} />
-            <ActionChip icon={Mail} label="Email" onClick={() => onAction("GENERATE_EMAIL")} />
-            <ActionChip icon={Share2} label="Share" />
-          </div>
-        )}
-      </GlassCard>
-
-      {/* Summary Card */}
-      {summary && (
-        <GlassCard>
-          <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
-            <Sparkles size={14} className="text-thyn-primary" />
-            AI Summary
-          </h3>
-          <p className="text-sm leading-relaxed text-thyn-muted">
-            {summary.summary || "Summary generated."}
-          </p>
-
-          {summary.tasks?.length > 0 && (
-            <div className="mt-4 pt-3 border-t border-thyn-border">
-              <h4 className="text-xs font-medium text-thyn-muted mb-2 uppercase tracking-wider">
-                Action Items
-              </h4>
-              <div className="space-y-1.5">
-                {summary.tasks.map((task: string, i: number) => (
-                  <div key={i} className="flex items-start gap-2 text-sm">
-                    <div className="w-1.5 h-1.5 rounded-full bg-thyn-primary mt-1.5 flex-shrink-0" />
-                    <span>{task}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </GlassCard>
-      )}
-
-      {/* Quick Actions */}
-      <GlassCard>
-        <h3 className="text-sm font-semibold mb-3">Quick Actions</h3>
-        <div className="grid grid-cols-2 gap-2">
-          <QuickAction icon={Search} label="Search Captures" />
-          <QuickAction icon={Clock} label="Recent" />
-          <QuickAction icon={TrendingUp} label="Trending" />
-          <QuickAction icon={Layers} label="Compare Tabs" />
-        </div>
-      </GlassCard>
-    </motion.div>
-  );
-}
-
-function GlassCard({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return (
-    <div
-      className={`bg-thyn-surface backdrop-blur-2xl border border-thyn-border rounded-3xl p-5 shadow-glass ${className}`}
-    >
-      {children}
-    </div>
-  );
-}
-
-function ActionChip({
-  icon: Icon,
-  label,
-  onClick,
-  loading,
-}: {
-  icon: any;
-  label: string;
-  onClick?: () => void;
-  loading?: boolean;
-}) {
-  return (
-    <motion.button
-      whileHover={{ scale: 1.02 }}
-      whileTap={{ scale: 0.98 }}
-      onClick={onClick}
-      disabled={loading}
-      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-xl bg-thyn-surface hover:bg-white/10 border border-thyn-border transition-all"
-    >
-      <Icon size={12} />
-      {loading ? "..." : label}
-    </motion.button>
-  );
-}
-
-function QuickAction({ icon: Icon, label }: { icon: any; label: string }) {
-  return (
-    <button className="flex items-center gap-2 p-3 rounded-2xl bg-thyn-surface hover:bg-white/10 border border-thyn-border text-sm transition-all">
-      <Icon size={14} className="text-thyn-muted" />
-      {label}
-    </button>
-  );
-}
-
-function CapturesView() {
-  const [captures, setCaptures] = React.useState<any[]>([]);
-
-  React.useEffect(() => {
-    chrome.storage.local.get("thyn_state", (data) => {
-      const state = data.thyn_state;
-      if (state?.captures) setCaptures(state.captures);
-    });
-  }, []);
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -12 }}
-      className="space-y-3"
-    >
-      <h2 className="text-sm font-semibold mb-4">Saved Captures</h2>
-      {captures.length === 0 && (
-        <p className="text-sm text-thyn-muted">No captures yet. Capture a page to get started.</p>
-      )}
-      {captures.map((c: Capture) => (
-        <GlassCard key={c.id}>
-          <div className="flex items-start gap-3">
-            <div className="w-8 h-8 rounded-lg bg-thyn-surface flex items-center justify-center flex-shrink-0 border border-thyn-border">
-              <FileText size={14} className="text-thyn-muted" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{c.title}</p>
-              <p className="text-xs text-thyn-muted truncate mt-0.5">{c.url}</p>
-              <p className="text-xs text-thyn-muted mt-1">
-                {new Date(c.capturedAt).toLocaleDateString("en-US", {
-                  month: "short",
-                  day: "numeric",
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
-              </p>
-            </div>
-          </div>
-        </GlassCard>
-      ))}
-    </motion.div>
-  );
-}
-
-function TasksView() {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -12 }}
-      className="space-y-3"
-    >
-      <h2 className="text-sm font-semibold mb-4">Extracted Tasks</h2>
-      <p className="text-sm text-thyn-muted">Tasks extracted from your captures will appear here.</p>
-    </motion.div>
-  );
-}
-
-function TemplatesView() {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -12 }}
-      className="space-y-3"
-    >
-      <h2 className="text-sm font-semibold mb-4">Templates</h2>
-      <div className="grid gap-2">
-        {["Summary", "Action Items", "Follow-up Email", "Study Notes", "Meeting Brief", "Social Post"].map(
-          (tpl) => (
-            <GlassCard key={tpl}>
-              <div className="flex items-center gap-3">
-                <FileText size={14} className="text-thyn-muted" />
-                <span className="text-sm">{tpl}</span>
-                <span className="ml-auto text-xs text-thyn-muted">Use</span>
-              </div>
-            </GlassCard>
-          )
         )}
       </div>
-    </motion.div>
+    );
+  }
+
+  if (!profile) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full p-6 text-center">
+        <div className="text-3xl mb-2">👤</div>
+        <p className="text-sm text-white/60">Not a LinkedIn profile</p>
+        <p className="text-xs text-white/40 mt-2">
+          Open a LinkedIn profile to save a contact.
+        </p>
+      </div>
+    );
+  }
+
+  const isSaved = !!contact;
+
+  return (
+    <div className="p-4 space-y-4">
+      {/* Header */}
+      <div className="flex items-center gap-3">
+        <div className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center text-xs font-medium shrink-0 text-white/60">
+          {profile.avatarUrl ? (
+            <img src={profile.avatarUrl} alt="" className="w-full h-full rounded-full object-cover" />
+          ) : (
+            profile.name.charAt(0).toUpperCase()
+          )}
+        </div>
+        <div className="min-w-0">
+          <h2 className="font-semibold text-sm truncate">{profile.name}</h2>
+          <p className="text-xs text-white/50 truncate">
+            {profile.headline || profile.company || ""}
+          </p>
+        </div>
+      </div>
+
+      {/* Save / Contact Info */}
+      {!isSaved ? (
+        <button
+          onClick={handleSaveContact}
+          disabled={saving}
+          className="w-full py-2.5 rounded-xl bg-blue-500/20 text-blue-400 text-sm font-medium border border-blue-500/30 hover:bg-blue-500/30 transition disabled:opacity-30"
+        >
+          {saving ? "Saving..." : "+ Save Contact"}
+        </button>
+      ) : (
+        <div className="p-3 rounded-xl bg-green-500/10 border border-green-500/20">
+          <div className="flex items-center gap-2">
+            <span className="text-green-400 text-sm">✓ Saved</span>
+            <span className="text-xs text-white/40">
+              {notes.length} note{notes.length !== 1 ? "s" : ""}
+              {notes.length > 0 && reminders.length > 0 ? " · " : ""}
+              {reminders.length > 0 && `${reminders.length} reminder${reminders.length !== 1 ? "s" : ""}`}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Notes */}
+      <div>
+        <h3 className="text-xs font-semibold text-white/50 uppercase tracking-wider mb-2">
+          Notes
+        </h3>
+        {isSaved && (
+          <div className="flex gap-2 mb-2">
+            <input
+              type="text"
+              placeholder="Add a note..."
+              value={noteInput}
+              onChange={(e) => setNoteInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleAddNote()}
+              className="flex-1 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-sm text-white outline-none focus:border-white/25 placeholder:text-white/30"
+            />
+            <button
+              onClick={handleAddNote}
+              disabled={!noteInput.trim()}
+              className="px-3 py-1.5 rounded-lg bg-white/10 text-xs text-white/80 hover:bg-white/20 transition disabled:opacity-30"
+            >
+              Add
+            </button>
+          </div>
+        )}
+        <div className="space-y-1.5">
+          {notes.length === 0 && (
+            <p className="text-xs text-white/30 py-2 text-center">
+              {isSaved ? "No notes yet." : "Save the contact first."}
+            </p>
+          )}
+          {notes.slice(0, 5).map((note) => (
+            <div key={note.id} className="p-2 rounded-lg bg-white/[.03] border border-white/[.06]">
+              <p className="text-xs text-white/70">{note.content}</p>
+              <span className="text-[10px] text-white/30 mt-1 block">
+                {formatRelative(note.createdAt)}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Reminders */}
+      <div>
+        <h3 className="text-xs font-semibold text-white/50 uppercase tracking-wider mb-2">
+          Reminders
+        </h3>
+        <div className="space-y-1.5">
+          {reminders.length === 0 && (
+            <p className="text-xs text-white/30 py-2 text-center">
+              {isSaved ? "No reminders yet." : "Save the contact first."}
+            </p>
+          )}
+          {reminders.filter((r) => !r.done).slice(0, 3).map((reminder) => (
+            <div key={reminder.id} className="p-2 rounded-lg bg-white/[.03] border border-white/[.06]">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px]">⏰</span>
+                <span className="text-xs text-white/80">{reminder.title}</span>
+              </div>
+              <span className="text-[10px] text-white/30 ml-4">
+                Due {formatDate(reminder.dueAt)}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="pt-2 text-center">
+        <a
+          href={`http://localhost:3000/contact/${contact?.id || ""}`}
+          target="_blank"
+          className="text-xs text-white/30 hover:text-white/60 transition no-underline"
+        >
+          Open in Dashboard →
+        </a>
+      </div>
+    </div>
   );
 }
 
-ReactDOM.createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
-    <SidePanel />
-  </React.StrictMode>
-);
+// ── Helpers ────────────────────────────────────────────────
+function formatRelative(dateStr: string): string {
+  const d = new Date(dateStr);
+  const now = new Date();
+  const diff = now.getTime() - d.getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return d.toLocaleDateString();
+}
+
+function formatDate(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  });
+}
+
+// ── Mount ─────────────────────────────────────────────────
+ReactDOM.createRoot(document.getElementById("root")!).render(<SidePanel />);

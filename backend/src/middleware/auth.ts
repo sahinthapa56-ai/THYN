@@ -1,42 +1,26 @@
 import type { FastifyRequest, FastifyReply } from "fastify";
-import jwt from "jsonwebtoken";
-import { config } from "../config/index.js";
+import { verifyToken } from "../services/supabase.service.js";
 
-interface JwtPayload {
-  userId: string;
-  email: string;
-  plan: string;
+export interface AuthenticatedRequest extends FastifyRequest {
+  userId?: string;
+  email?: string;
 }
 
-declare module "fastify" {
-  interface FastifyRequest {
-    user?: JwtPayload;
-  }
-}
-
-export async function authMiddleware(request: FastifyRequest, reply: FastifyReply) {
+export async function authMiddleware(
+  request: AuthenticatedRequest,
+  reply: FastifyReply
+) {
   const authHeader = request.headers.authorization;
   if (!authHeader?.startsWith("Bearer ")) {
-    return reply.status(401).send({ error: "Missing authorization token" });
+    return reply.status(401).send({ error: "Missing or invalid token" });
   }
 
-  try {
-    const token = authHeader.slice(7);
-    const decoded = jwt.verify(token, config.auth.jwtSecret) as JwtPayload;
-    request.user = decoded;
-  } catch {
+  const token = authHeader.slice(7);
+  const user = await verifyToken(token);
+  if (!user) {
     return reply.status(401).send({ error: "Invalid or expired token" });
   }
-}
 
-export function generateToken(payload: JwtPayload): string {
-  return jwt.sign(payload, config.auth.jwtSecret, { expiresIn: "7d" });
-}
-
-export function verifyToken(token: string): JwtPayload | null {
-  try {
-    return jwt.verify(token, config.auth.jwtSecret) as JwtPayload;
-  } catch {
-    return null;
-  }
+  request.userId = user.id;
+  request.email = user.email || undefined;
 }

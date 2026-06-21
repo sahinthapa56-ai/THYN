@@ -1,139 +1,62 @@
 "use client"
 
-import { useRef, useState, useEffect } from "react"
-import { NavBar, SiteFooter, useStars, useToast, ToastBar, getAuthUser, saveAuthUser, clearAuthUser, saveProfile, defaultProfile, getPlan, getPlanLabel, setPlan, getRemainingCredits } from "@/lib/shared"
-import type { AuthUser } from "@/lib/shared"
+import { useSession, signInWithGoogle } from "@/lib/shared"
+import { useRouter } from "next/navigation"
+import { useEffect } from "react"
 
 export default function AuthPage() {
-  const starsRef = useRef<HTMLCanvasElement>(null)
-  const { toast, showToast } = useToast()
-  useStars(starsRef)
+  const { session, loading } = useSession()
+  const router = useRouter()
 
-  const [tab, setTab] = useState<"register" | "login">("register")
-  const [user, setUser] = useState<AuthUser | null>(null)
-  const [mounted, setMounted] = useState(false)
+  useEffect(() => {
+    if (session && !loading) router.push("/dashboard")
+  }, [session, loading, router])
 
-  useEffect(() => { setUser(getAuthUser()); setMounted(true) }, [])
-
-  const register = () => {
-    const name = (document.getElementById("reg-name") as HTMLInputElement)?.value
-    const email = (document.getElementById("reg-email") as HTMLInputElement)?.value
-    const password = (document.getElementById("reg-password") as HTMLInputElement)?.value
-    if (!name || !email || !password) { showToast("Fill all fields"); return }
-    const u = { name, email }
-    saveAuthUser(u)
-    saveProfile(defaultProfile(name, email))
-    setUser(u)
-    showToast("Account created! Welcome to SHNTHA.")
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin w-6 h-6 border-2 border-white/20 border-t-white rounded-full" />
+      </div>
+    )
   }
-
-  const login = () => {
-    const email = (document.getElementById("login-email") as HTMLInputElement)?.value
-    const password = (document.getElementById("login-password") as HTMLInputElement)?.value
-    if (!email || !password) { showToast("Fill all fields"); return }
-    const saved = getAuthUser()
-    if (saved) { setUser(saved); showToast(`Welcome back, ${saved.name}!`) }
-    else showToast("No account found. Create one first.")
-  }
-
-  const logout = () => {
-    clearAuthUser()
-    setUser(null)
-    showToast("Signed out")
-  }
-
-  if (!mounted) return <div className="min-h-screen" />
 
   return (
-    <>
-      <div className="fixed inset-0 opacity-[0.035] pointer-events-none z-[-1]"
-        style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")` }} />
-      <canvas ref={starsRef} className="fixed inset-0 z-[-2]" />
-      <ToastBar toast={toast} />
-      <NavBar />
+    <div className="min-h-screen flex flex-col items-center justify-center p-8">
+      <div className="text-center max-w-sm">
+        <h1 className="text-4xl font-bold tracking-tight mb-2">THYN</h1>
+        <p className="text-white/50 text-sm mb-8">
+          Relationship Memory for LinkedIn
+        </p>
 
-      <section className="pt-32 pb-20">
-        <div className="container">
-          <h2 className="title reveal">Create Your Account</h2>
-          <p className="subtitle reveal">Join freelancers using SHNTHA to win more clients and earn more. Start your 4-month free trial today — no credit card required.</p>
+        <button
+          onClick={signInWithGoogle}
+          className="w-full px-6 py-3 rounded-xl bg-white text-black font-semibold text-sm hover:bg-white/90 transition flex items-center justify-center gap-3"
+        >
+          <svg className="w-5 h-5" viewBox="0 0 24 24">
+            <path
+              fill="currentColor"
+              d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"
+            />
+            <path
+              fill="currentColor"
+              d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+            />
+            <path
+              fill="currentColor"
+              d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+            />
+            <path
+              fill="currentColor"
+              d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+            />
+          </svg>
+          Continue with Google
+        </button>
 
-          <div className="max-w-[520px] mx-auto rounded-[28px] p-10 reveal"
-            style={{ background: "rgba(255,255,255,.05)", border: "1px solid rgba(255,255,255,.18)" }}>
-            {user ? (
-              <div className="text-center">
-                <div className="w-16 h-16 rounded-full bg-[#c8ff57] flex items-center justify-center text-black text-2xl font-bold mx-auto mb-3">
-                  {user.name.charAt(0).toUpperCase()}
-                </div>
-                <div className="text-lg font-semibold text-[#7dff9f]">Welcome, {user.name}!</div>
-                <div className="text-sm text-white/60 mt-1">{user.email}</div>
-                <div className="mt-4 px-4 py-2 rounded-xl bg-white/[.04] border border-white/10 inline-block">
-                  <span className="text-xs text-white/60">Plan: </span>
-                  <span className="text-xs font-semibold text-[#c8ff57]">{getPlanLabel(getPlan())}</span>
-                  {getPlan() === "free" && (
-                    <span className="text-xs text-white/40 ml-2">({getRemainingCredits()} credits left)</span>
-                  )}
-                </div>
-                {getPlan() === "free" && (
-                  <div className="mt-4 space-y-2">
-                    <p className="text-xs text-white/40">Upgrade to unlock unlimited generations:</p>
-                    <div className="flex gap-2 justify-center flex-wrap">
-                      <button onClick={() => { setPlan("premium"); showToast("Upgraded to Premium!"); }}
-                        className="px-4 py-2 rounded-xl bg-[#c8ff57] text-black text-xs font-semibold hover:bg-[#d8ff70] transition">Premium $19/mo</button>
-                      <button onClick={() => { setPlan("elite"); showToast("Upgraded to Elite!"); }}
-                        className="px-4 py-2 rounded-xl bg-white/10 text-white text-xs font-semibold hover:bg-white/15 transition border border-white/10">Elite $49/mo</button>
-                      <button onClick={() => { setPlan("team"); showToast("Enterprise plan selected!"); }}
-                        className="px-4 py-2 rounded-xl bg-white/10 text-white text-xs font-semibold hover:bg-white/15 transition border border-white/10">Enterprise</button>
-                    </div>
-                  </div>
-                )}
-                <div className="flex gap-3 justify-center mt-6">
-                  <a href="/dashboard"
-                    className="px-5 py-2.5 rounded-xl bg-[#c8ff57] text-black text-sm font-semibold no-underline hover:bg-[#d8ff70] transition">Go to Dashboard</a>
-                  <button onClick={logout}
-                    className="px-5 py-2.5 rounded-xl bg-white/10 border border-white/10 text-sm text-white/60 hover:bg-white/15 transition">Sign Out</button>
-                </div>
-              </div>
-            ) : (
-              <>
-                <div className="flex gap-0 mb-7 bg-white/[.04] rounded-xl p-1">
-                  <button onClick={() => setTab("register")}
-                    className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition ${tab === "register" ? "bg-white/10 text-white" : "text-white/60"}`}>Create Account</button>
-                  <button onClick={() => setTab("login")}
-                    className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition ${tab === "login" ? "bg-white/10 text-white" : "text-white/60"}`}>Sign In</button>
-                </div>
-                {tab === "register" ? (
-                  <div className="flex flex-col gap-1">
-                    <label className="form-label">Full Name</label>
-                    <input id="reg-name" placeholder="Your full name"
-                      className="w-full bg-[#0a0a0a] border border-white/10 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-white/25" />
-                    <label className="form-label">Email Address</label>
-                    <input id="reg-email" type="email" placeholder="you@email.com"
-                      className="w-full bg-[#0a0a0a] border border-white/10 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-white/25" />
-                    <label className="form-label">Password</label>
-                    <input id="reg-password" type="password" placeholder="Create a strong password"
-                      className="w-full bg-[#0a0a0a] border border-white/10 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-white/25" />
-                    <button className="gen-btn mt-5" onClick={register}>Start 4-Month Free Trial →</button>
-                    <p className="text-[11px] text-white/30 text-center mt-3">$19/mo after trial. Cancel anytime. No credit card needed.</p>
-                  </div>
-                ) : (
-                  <div className="flex flex-col gap-1">
-                    <label className="form-label">Email Address</label>
-                    <input id="login-email" type="email" placeholder="you@email.com"
-                      className="w-full bg-[#0a0a0a] border border-white/10 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-white/25" />
-                    <label className="form-label">Password</label>
-                    <input id="login-password" type="password" placeholder="Your password"
-                      className="w-full bg-[#0a0a0a] border border-white/10 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-white/25" />
-                    <button className="gen-btn mt-5" onClick={login}>Sign In →</button>
-                    <p className="text-[11px] text-white/30 text-center mt-3">Demo: just enter the email you registered with</p>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-      </section>
-
-      <SiteFooter />
-    </>
+        <p className="text-[11px] text-white/30 mt-4">
+          Sign in with your Google account to save and manage LinkedIn contacts.
+        </p>
+      </div>
+    </div>
   )
 }

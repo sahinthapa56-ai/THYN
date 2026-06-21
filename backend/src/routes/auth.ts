@@ -1,114 +1,87 @@
 import type { FastifyInstance } from "fastify";
-import { z } from "zod";
-import { PrismaClient } from "@prisma/client";
-import { generateToken } from "../middleware/auth.js";
 import { config } from "../config/index.js";
+import { getSupabase, getServiceSupabase } from "../services/supabase.service.js";
 
-const prisma = new PrismaClient();
+export function authRoutes(app: FastifyInstance) {
+  // Return Supabase OAuth config for the client
+  app.get("/providers", async () => ({
+    supabaseUrl: config.supabase.url,
+    anonKey: config.supabase.anonKey,
+  }));
 
-const loginSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(6),
-});
-
-const registerSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(6),
-  name: z.string().min(1),
-});
-
-const googleSchema = z.object({
-  code: z.string(),
-  redirectUri: z.string(),
-});
-
-export async function authRoutes(app: FastifyInstance) {
-  app.post("/register", async (request, reply) => {
-    const body = registerSchema.parse(request.body);
-
-    const existing = await prisma.user.findUnique({ where: { email: body.email } });
-    if (existing) {
-      return reply.status(409).send({ error: "Email already registered" });
+  // Exchange a Supabase session for a local profile (upsert)
+  app.post("/session", async (request, reply) => {
+    const { access_token } = request.body as { access_token?: string };
+    if (!access_token) {
+      return reply.status(400).send({ error: "access_token required" });
     }
 
-    const user = await prisma.user.create({
-      data: {
-        email: body.email,
-        name: body.name,
-      },
-    });
-
-    const token = generateToken({
-      userId: user.id,
-      email: user.email,
-      plan: user.plan,
-    });
-
-    return { token, user: { id: user.id, email: user.email, name: user.name } };
-  });
-
-  app.post("/login", async (request, reply) => {
-    const body = loginSchema.parse(request.body);
-
-    const user = await prisma.user.findUnique({ where: { email: body.email } });
-    if (!user) {
-      return reply.status(401).send({ error: "Invalid credentials" });
+    const supabase = getSupabase();
+    const { data, error } = await supabase.auth.getUser(access_token);
+    if (error || !data.user) {
+      return reply.status(401).send({ error: "Invalid token" });
     }
 
-    const token = generateToken({
-      userId: user.id,
-      email: user.email,
-      plan: user.plan,
+    const su = data.user;
+    const prisma = (await import("../lib/prisma.js")).default;
+
+    let profile = await prisma.profile.findUnique({
+      where: { supabaseId: su.id },
     });
 
-    return { token, user: { id: user.id, email: user.email, name: user.name } };
-  });
-
-  app.post("/google", async (request, reply) => {
-    const body = googleSchema.parse(request.body);
-
-    const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        code: body.code,
-        client_id: config.auth.googleClientId,
-        client_secret: config.auth.googleClientSecret,
-        redirect_uri: body.redirectUri,
-        grant_type: "authorization_code",
-      }),
-    });
-
-    const tokens = await tokenResponse.json();
-    if (!tokens.access_token) {
-      return reply.status(401).send({ error: "Google auth failed" });
-    }
-
-    const profileRes = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
-      headers: { Authorization: `Bearer ${tokens.access_token}` },
-    });
-
-    const profile = await profileRes.json();
-
-    let user = await prisma.user.findUnique({ where: { googleId: profile.id } });
-
-    if (!user) {
-      user = await prisma.user.create({
+    if (!profile) {
+      profile = await prisma.profile.create({
         data: {
-          email: profile.email,
-          name: profile.name,
-          avatar: profile.picture,
-          googleId: profile.id,
+          supabaseId: su.id,
+          email: su.email || "",
+          name:
+            su.user_metadata?.full_name ||
+            su.email?.split("@")[0] ||
+            "User",
+          avatar: su.user_metadata?.avatar_url || null,
+        },
+      });
+    } else {
+      profile = await prisma.profile.update({
+        where: { id: profile.id },
+        data: {
+          email: su.email || profile.email,
+          name:
+            su.user_metadata?.full_name ||
+            su.email?.split("@")[0] ||
+            profile.name,
+          avatar: su.user_metadata?.avatar_url || profile.avatar,
         },
       });
     }
 
-    const token = generateToken({
-      userId: user.id,
-      email: user.email,
-      plan: user.plan,
-    });
-
-    return { token, user: { id: user.id, email: user.email, name: user.name, avatar: user.avatar } };
+    return { profile, access_token };
   });
+
+  // Get current user profile from Bearer token
+  app.get("/me", async (request, reply) => {
+    const auth = request.headers.authorization;
+    if (!auth?.startsWith("Bearer ")) {
+      return reply.status(401).send({ error: "Unauthorized" });
+    }
+
+    const supabase = getSupabase();
+    const { data, error } = await supabase.auth.getUser(auth.slice(7));
+    if (error || !data.user) {
+      return reply.status(401).send({ error: "Invalid token" });
+    }
+
+    const prisma = (await import("../lib/prisma.js")).default;
+    const profile = await prisma.profile.findUnique({
+      where: { supabaseId: data.user.id },
+    });
+    if (!profile) {
+      return reply.status(404).send({ error: "Profile not found" });
+    }
+
+    return { user: profile };
+  });
+
+  // Logout — client-side (Supabase handles session), just ack
+  app.post("/logout", async () => ({ ok: true }));
 }

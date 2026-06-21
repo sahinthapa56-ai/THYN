@@ -6,16 +6,11 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build && node -e \"require('fs').cpSync('manifest.json','dist/manifest.json'); require('fs').cpSync('public/icons','dist/icons',{recursive:true}); console.log('Assets copied')\"",
-    "preview": "vite preview",
-    "lint": "eslint src --ext ts,tsx"
+    "preview": "vite preview"
   },
   "dependencies": {
-    "@tanstack/react-query": "^5.60.0",
-    "framer-motion": "^11.11.0",
-    "lucide-react": "^0.460.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "zustand": "^5.0.0"
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "@types/chrome": "^0.0.280",

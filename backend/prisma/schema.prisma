@@ -7,176 +7,79 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
-  avatar    String?
-  googleId  String?  @unique
-  plan      String   @default("free")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  captures    Capture[]
-  summaries   Summary[]
-  tasks       Task[]
-  workspaces  WorkspaceMember[]
-  sessions    Session[]
-}
-
-model Session {
-  id        String   @id @default(cuid())
-  userId    String
-  token     String   @unique
-  device    String?
-  expiresAt DateTime
-  createdAt DateTime @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([token])
-}
-
-model Capture {
-  id          String   @id @default(cuid())
-  url         String
-  title       String
-  text        String?
-  selection   String?
-  description String?
-  pageType    String?
-  tags        String[]
-  capturedAt  DateTime @default(now())
-  syncedAt    DateTime @updatedAt
-  deleted     Boolean  @default(false)
-
-  userId    String?
-  summary   Summary?
-  workspace Workspace?
-
-  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
-
-  @@index([userId])
-  @@index([url])
-  @@index([capturedAt])
-}
-
-model Summary {
-  id        String   @id @default(cuid())
-  model     String?
-  content   String?
-  tasks     String[]
-  keyPoints String[]
-  generatedAt DateTime @default(now())
-
-  captureId String @unique
-  capture   Capture @relation(fields: [captureId], references: [id], onDelete: Cascade)
-
-  userId String?
-  user   User? @relation(fields: [userId], references: [id], onDelete: SetNull)
-
-  @@index([captureId])
-  @@index([userId])
-}
-
-model Task {
+model Profile {
   id         String   @id @default(cuid())
-  text       String
-  done       Boolean  @default(false)
-  priority   String   @default("medium")
-  dueDate    DateTime?
-  sourceUrl  String?
-  sourceTitle String?
-  createdAt  DateTime @default(now())
+  email      String   @unique
+  name       String?
+  avatar     String?
+  supabaseId String?  @unique
 
-  userId String?
-  user   User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  contacts  Contact[]
+  notes     Note[]
+  reminders Reminder[]
 
-  workspaceId String?
-  workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([workspaceId])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
-model Workspace {
+model Contact {
   id        String   @id @default(cuid())
-  name      String
-  slug      String   @unique
+  profileId  String
+
+  /// LinkedIn profile URL — unique per contact
+  linkedinUrl String  @unique
+  name        String
+  headline    String?
+  company     String?
+  position    String?
+  location    String?
+  avatarUrl   String?
+  summary     String?
+
+  notes     Note[]
+  reminders Reminder[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  members  WorkspaceMember[]
-  captures Capture[]
-  tasks    Task[]
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId])
+  @@index([linkedinUrl])
 }
 
-model WorkspaceMember {
+model Note {
   id        String   @id @default(cuid())
-  role      String   @default("member")
+  contactId  String
+  profileId  String
+  content   String
+
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  userId String
-  workspaceId String
+  contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, workspaceId])
-  @@index([userId])
-  @@index([workspaceId])
+  @@index([contactId])
+  @@index([profileId])
 }
 
-model Template {
-  id          String   @id @default(cuid())
-  name        String
-  description String?
-  mode        String
-  icon        String?
-  prompt      String?
-  isPublic    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-
-  ownerId String?
-  owner   User? @relation(fields: [ownerId], references: [id], onDelete: SetNull)
-}
-
-model ShareLink {
+model Reminder {
   id        String   @id @default(cuid())
-  captureId String
-  token     String   @unique
-  expiresAt DateTime?
+  contactId  String
+  profileId  String
+  title     String
+  note      String?
+  dueAt     DateTime
+  done      Boolean  @default(false)
+
   createdAt DateTime @default(now())
-  views     Int      @default(0)
+  updatedAt DateTime @updatedAt
 
-  capture Capture @relation(fields: [captureId], references: [id], onDelete: Cascade)
+  contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
-  @@index([token])
-}
-
-model Usage {
-  id        String   @id @default(cuid())
-  userId    String
-  action    String
-  tokens    Int      @default(0)
-  createdAt DateTime @default(now())
-
-  @@index([userId])
-  @@index([createdAt])
-}
-
-model Subscription {
-  id            String   @id @default(cuid())
-  userId        String   @unique
-  plan          String
-  status        String
-  stripeId      String?
-  currentPeriodStart DateTime?
-  currentPeriodEnd   DateTime?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  @@index([userId])
-  @@index([stripeId])
+  @@index([contactId])
+  @@index([profileId])
+  @@index([dueAt])
 }

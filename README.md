@@ -1,77 +1,100 @@
-# THYN — The AI Operating System for the Browser
+# THYN — Relationship Memory for LinkedIn
 
-Turn any webpage into action. THYN is a premium Apple-style glassmorphism Chrome Extension + SaaS workspace that transforms browsing into productive outcomes.
+**THYN V1** is a simple, focused tool to remember your LinkedIn relationships.
+
+Not an AI CRM. Not a browser dashboard. Not a team platform. Just your contacts, notes, and reminders — tied to LinkedIn profiles.
 
 ## Architecture
 
 ```
-THYN/
-├─ extension/     Chrome Extension (React + TypeScript + Vite + Tailwind)
-├─ backend/       API Server (Fastify + TypeScript + Prisma + PostgreSQL)
-├─ web/           SaaS Dashboard (Next.js 15 + TypeScript + Tailwind)
-└─ README.md
+extension/   — Chrome Extension (LinkedIn sidebar)
+backend/     — Fastify API (contacts, notes, reminders)
+web/         — Next.js dashboard (auth, contacts, settings)
 ```
 
-## Features
+### Stack
 
-- **Capture** any page, selection, or media with one click
-- **Understand** with AI — summarize, extract tasks, generate emails, create flashcards
-- **Organize** in a persistent workspace with tags, folders, and search
-- **Act** — convert pages into action items, briefs, study notes, and social posts
-- **Share** — public brief links, exports, and team collaboration
-- **Compare** — analyze multiple tabs and create decision reports
+| Component | Tech |
+|-----------|------|
+| Extension | React 18, TypeScript, Vite 6, Chrome MV3 |
+| Backend   | Fastify 5, TypeScript, Prisma 6, PostgreSQL |
+| Web       | Next.js 15, TypeScript, TailwindCSS |
+| Auth      | Supabase Auth (Google OAuth) |
 
-## Tech Stack
+## Quick Start
 
-| Layer | Technology |
-|-------|-----------|
-| Extension | React 18, TypeScript, Vite 6, TailwindCSS, Framer Motion, Zustand |
-| Web App | Next.js 15, TypeScript, TailwindCSS, shadcn/ui |
-| Backend | Node.js, Fastify 5, TypeScript, Prisma ORM |
-| Database | PostgreSQL |
-| Cache/Queue | Redis, BullMQ |
-| AI | OpenAI GPT-4o-mini, Gemini 2.0 Flash, Claude |
-| Auth | Chrome Identity API + JWT |
-| Realtime | WebSocket |
+### 1. Supabase
 
-## Getting Started
+Create a project at [supabase.com](https://supabase.com), then set up auth:
 
-### Extension
+- Enable **Google** provider in Auth → Providers
+- Get your project URL, anon key, and service role key
 
-```bash
-cd extension
-pnpm install
-pnpm dev
-```
-
-Load the `dist` folder as an unpacked extension in Chrome.
-
-### Backend
+### 2. Backend
 
 ```bash
 cd backend
-pnpm install
-cp .env.example .env
-# Edit .env with your database and API keys
-pnpm db:push
-pnpm dev
+cp .env.example .env     # fill in Supabase credentials
+npm install
+npx prisma db push       # sync schema to DB
+npm run dev              # starts on :3001
 ```
 
-### Web App
+### 3. Web Dashboard
 
 ```bash
 cd web
-pnpm install
-pnpm dev
+cp .env.local.example .env.local  # fill in Supabase credentials
+npm install
+npm run dev                       # starts on :3000
 ```
 
-## Chrome Web Store
+### 4. Extension
 
-1. Run `pnpm build` in `extension/`
-2. Zip the `dist` folder
-3. Upload to Chrome Web Store Developer Dashboard
-4. Required: privacy policy, screenshots, feature list
+```bash
+cd extension
+npm install
+npm run dev          # builds & watches
+```
 
-## License
+Load the `extension/dist` folder in Chrome → `chrome://extensions` → Load unpacked.
 
-Private — All rights reserved.
+### 5. Usage
+
+1. Open `linkedin.com/in/*` — the content script detects the profile
+2. Click the THYN toolbar icon → **Open Side Panel**
+3. Paste your access token from dashboard settings
+4. **Save Contact**, add notes and reminders
+
+## Pages
+
+- `/auth` — Sign in with Google
+- `/dashboard` — View all saved contacts
+- `/contact/[id]` — Contact detail with notes & reminders
+- `/settings` — Account info & access token
+
+## API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/auth/session` | Exchange Supabase token |
+| GET | `/auth/me` | Current user profile |
+| GET | `/contacts` | List contacts |
+| POST | `/contacts` | Save a LinkedIn contact |
+| GET | `/contacts/:id` | Contact detail |
+| PUT | `/contacts/:id` | Update contact |
+| DELETE | `/contacts/:id` | Delete contact |
+| POST | `/notes` | Add note to contact |
+| GET | `/notes/contact/:id` | List notes for contact |
+| POST | `/reminders` | Add reminder |
+| GET | `/reminders?upcoming=true` | List reminders |
+| PUT | `/reminders/:id/done` | Mark reminder done |
+
+## SSOT
+
+THYN V1 is defined by a strict Source of Truth:
+
+> THYN = Relationship Memory for LinkedIn
+> Not AI CRM / Not Browser Memory / Not Teams / Not Analytics / Not Enterprise
+
+Everything in this repo aligns to that principle. No AI, no billing, no analytics, no workspaces, no CRM — just contacts, notes, and reminders tied to LinkedIn.

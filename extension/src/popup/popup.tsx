@@ -1,92 +1,106 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { motion } from "framer-motion";
 
 function Popup() {
-  const [status, setStatus] = React.useState("");
+  const [token, setToken] = React.useState<string | null>(null);
+  const [profile, setProfile] = React.useState<any>(null);
 
-  async function send(type: string) {
-    setStatus("Processing...");
-    try {
-      const res = await chrome.runtime.sendMessage({ type });
-      setStatus(res?.ok ? "Done" : "Failed");
-    } catch {
-      setStatus("Error");
-    }
-    setTimeout(() => setStatus(""), 2000);
-  }
+  React.useEffect(() => {
+    chrome.runtime.sendMessage({ type: "GET_TOKEN" }, (res) => {
+      setToken(res?.token || null);
+    });
+    chrome.runtime.sendMessage({ type: "GET_LINKEDIN_PROFILE" }, (res) => {
+      if (res?.ok) setProfile(res.profile);
+    });
+  }, []);
+
+  const openDashboard = () => {
+    chrome.tabs.create({ url: "http://localhost:3000/dashboard" });
+  };
+
+  const openSidePanel = () => {
+    chrome.runtime.sendMessage({ type: "OPEN_PANEL" });
+  };
+
+  const isLinkedInProfile = profile !== null;
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="w-[320px] p-5 bg-thyn-bg/80 backdrop-blur-xl text-thyn-text rounded-3xl border border-thyn-border shadow-glass"
-    >
-      <div className="flex items-center justify-between mb-5">
-        <h1 className="text-xl font-semibold tracking-tight">THYN</h1>
-        <span className="text-xs text-thyn-muted font-medium uppercase tracking-wider">
-          AI Workspace
+    <div style={{
+      width: "280px",
+      padding: "16px",
+      background: "#0a0a0a",
+      color: "#fff",
+      fontFamily: "system-ui, -apple-system, sans-serif",
+      fontSize: "13px",
+    }}>
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
+        <span style={{ fontWeight: 700, fontSize: "16px" }}>THYN</span>
+        <span style={{ color: token ? "#22c55e" : "#6b7280", fontSize: "10px", background: token ? "rgba(34,197,94,0.1)" : "rgba(107,114,128,0.1)", padding: "2px 8px", borderRadius: "999px" }}>
+          {token ? "Connected" : "Not signed in"}
         </span>
       </div>
 
-      <div className="space-y-2.5">
-        <ActionBtn label="Capture Page" onClick={() => send("CAPTURE_PAGE")} />
-
-        <ActionBtn
-          label="Summarize"
-          onClick={() => send("SUMMARIZE_PAGE")}
-          className="bg-thyn-primary/20 hover:bg-thyn-primary/30 text-thyn-primary border-thyn-primary/20"
-        />
-
-        <ActionBtn
-          label="Extract Tasks"
-          onClick={() => send("EXTRACT_TASKS")}
-          className="bg-thyn-success/20 hover:bg-thyn-success/30 text-thyn-success border-thyn-success/20"
-        />
-
-        <ActionBtn
-          label="Open Workspace"
-          onClick={() => send("OPEN_PANEL")}
-          className="bg-thyn-accent/20 hover:bg-thyn-accent/30 text-thyn-accent border-thyn-accent/20"
-        />
+      {/* Status */}
+      <div style={{
+        padding: "12px",
+        borderRadius: "10px",
+        background: isLinkedInProfile ? "rgba(34,197,94,0.08)" : "rgba(107,114,128,0.08)",
+        border: `1px solid ${isLinkedInProfile ? "rgba(34,197,94,0.2)" : "rgba(107,114,128,0.15)"}`,
+        marginBottom: "12px",
+      }}>
+        <div style={{ fontSize: "13px", fontWeight: 500, marginBottom: "2px" }}>
+          {isLinkedInProfile ? profile?.name || "LinkedIn Profile" : "Not on LinkedIn"}
+        </div>
+        <div style={{ fontSize: "11px", color: "#9ca3af" }}>
+          {isLinkedInProfile
+            ? "Open the side panel to save this contact."
+            : "Navigate to a LinkedIn profile to save contacts."}
+        </div>
       </div>
 
-      <div className="mt-4 pt-3 border-t border-thyn-border flex items-center justify-between">
-        <span className="text-xs text-thyn-muted">{status}</span>
+      {/* Actions */}
+      <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
         <button
-          onClick={() => chrome.runtime.openOptionsPage()}
-          className="text-xs text-thyn-muted hover:text-thyn-text transition-colors"
+          onClick={openSidePanel}
+          style={{
+            padding: "10px",
+            borderRadius: "10px",
+            border: "none",
+            background: "rgba(255,255,255,0.08)",
+            color: "#fff",
+            fontSize: "13px",
+            cursor: "pointer",
+            fontWeight: 500,
+          }}
         >
-          Settings
+          Open Side Panel
+        </button>
+        <button
+          onClick={openDashboard}
+          style={{
+            padding: "10px",
+            borderRadius: "10px",
+            border: "none",
+            background: "rgba(255,255,255,0.08)",
+            color: "#fff",
+            fontSize: "13px",
+            cursor: "pointer",
+            fontWeight: 500,
+          }}
+        >
+          Open Dashboard
         </button>
       </div>
-    </motion.div>
+
+      {/* Token status */}
+      {!token && (
+        <div style={{ marginTop: "12px", fontSize: "11px", color: "#6b7280", textAlign: "center" }}>
+          Sign in at the dashboard and copy your token to Settings.
+        </div>
+      )}
+    </div>
   );
 }
 
-function ActionBtn({
-  label,
-  onClick,
-  className = "",
-}: {
-  label: string;
-  onClick: () => void;
-  className?: string;
-}) {
-  return (
-    <motion.button
-      whileHover={{ scale: 1.01 }}
-      whileTap={{ scale: 0.99 }}
-      onClick={onClick}
-      className={`w-full p-3 rounded-2xl bg-thyn-surface hover:bg-white/10 border border-thyn-border text-sm font-medium transition-all ${className}`}
-    >
-      {label}
-    </motion.button>
-  );
-}
-
-ReactDOM.createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
-    <Popup />
-  </React.StrictMode>
-);
+ReactDOM.createRoot(document.getElementById("root")!).render(<Popup />);
