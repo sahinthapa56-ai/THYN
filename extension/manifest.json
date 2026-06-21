@@ -1,0 +1,64 @@
+{
+  "manifest_version": 3,
+  "name": "THYN",
+  "version": "1.0.0",
+  "description": "Turn any webpage into action - capture, understand, organize, act, share.",
+  "permissions": [
+    "storage",
+    "identity",
+    "alarms",
+    "notifications",
+    "activeTab",
+    "scripting",
+    "contextMenus",
+    "tabs",
+    "offscreen",
+    "sidePanel"
+  ],
+  "host_permissions": [
+    "https://api.thyn.app/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "THYN - AI Workspace",
+    "default_popup": "src/popup/popup.html"
+  },
+  "side_panel": {
+    "default_path": "src/sidepanel/sidepanel.html"
+  },
+  "options_page": "src/options/options.html",
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "commands": {
+    "open-sidepanel": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+K",
+        "mac": "Command+Shift+K"
+      },
+      "description": "Open THYN side panel"
+    },
+    "capture-page": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+Y",
+        "mac": "Command+Shift+Y"
+      },
+      "description": "Capture current page"
+    }
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self';"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
