@@ -3,7 +3,18 @@ import react from "@vitejs/plugin-react";
 import { resolve } from "path";
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    {
+      name: "remove-crossorigin",
+      transformIndexHtml: {
+        order: "post",
+        handler(html) {
+          return html.replace(/ crossorigin/g, "");
+        },
+      },
+    },
+  ],
   build: {
     outDir: "dist",
     rollupOptions: {
