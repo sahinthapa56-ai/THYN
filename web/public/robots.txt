@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Disallow: /auth/
+Disallow: /dashboard/
+Disallow: /contact/
+Disallow: /settings/
+Disallow: /api/
+
+Sitemap: https://thyn-flame.vercel.app/sitemap.xml
