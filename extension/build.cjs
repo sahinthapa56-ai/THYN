@@ -19,7 +19,7 @@ esbuild.buildSync({
   loader: { ".tsx": "tsx", ".ts": "ts" },
   define: {
     "process.env.NODE_ENV": '"production"',
-    "import.meta.env.VITE_API_URL": '"http://localhost:3001"',
+    "import.meta.env.VITE_API_URL": '"https://thyn-api.vercel.app"',
   },
 });
 
@@ -34,7 +34,7 @@ esbuild.buildSync({
   loader: { ".tsx": "tsx", ".ts": "ts" },
   define: {
     "process.env.NODE_ENV": '"production"',
-    "import.meta.env.VITE_API_URL": '"http://localhost:3001"',
+    "import.meta.env.VITE_API_URL": '"https://thyn-api.vercel.app"',
   },
 });
 
