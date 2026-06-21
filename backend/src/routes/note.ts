@@ -1,12 +1,12 @@
 import type { FastifyInstance } from "fastify";
 import { authMiddleware, type AuthenticatedRequest } from "../middleware/auth.js";
+import prisma from "../lib/prisma.js";
 
 export function noteRoutes(app: FastifyInstance) {
   app.addHook("preHandler", authMiddleware);
 
   // Create a note on a contact
   app.post("/", async (request: AuthenticatedRequest, reply) => {
-    const prisma = (await import("../lib/prisma.js")).default;
     const profile = await prisma.profile.findUnique({
       where: { supabaseId: request.userId },
     });
@@ -36,7 +36,6 @@ export function noteRoutes(app: FastifyInstance) {
 
   // List notes for a contact
   app.get("/contact/:contactId", async (request: AuthenticatedRequest, reply) => {
-    const prisma = (await import("../lib/prisma.js")).default;
     const profile = await prisma.profile.findUnique({
       where: { supabaseId: request.userId },
     });
@@ -52,7 +51,6 @@ export function noteRoutes(app: FastifyInstance) {
 
   // Delete a note
   app.delete("/:id", async (request: AuthenticatedRequest, reply) => {
-    const prisma = (await import("../lib/prisma.js")).default;
     const profile = await prisma.profile.findUnique({
       where: { supabaseId: request.userId },
     });

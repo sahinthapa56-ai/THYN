@@ -15,7 +15,7 @@ interface LinkedInProfile {
 }
 
 function scrapeLinkedInProfile(): LinkedInProfile | null {
-  const url = location.href;
+  const url = window.location.href;
 
   // Name
   const nameEl =

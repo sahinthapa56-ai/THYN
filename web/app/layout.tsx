@@ -16,8 +16,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body className="min-h-screen bg-[#050505] text-white antialiased">
-        {children}
-        <ClientLayout />
+        <ClientLayout>{children}</ClientLayout>
       </body>
     </html>
   );

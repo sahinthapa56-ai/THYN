@@ -90,6 +90,49 @@ Load the `extension/dist` folder in Chrome → `chrome://extensions` → Load un
 | GET | `/reminders?upcoming=true` | List reminders |
 | PUT | `/reminders/:id/done` | Mark reminder done |
 
+## Security
+
+- **Auth**: Supabase Google OAuth only. No passwords, no JWTs, no email login.
+- **RLS**: All tables have Row Level Security enabled. Users can only access their own data.
+- **API**: All backend routes verify Supabase access tokens via `auth.getUser()`.
+- **Ownership**: Contacts, notes, and reminders are scoped to the user's profile.
+
+## Database
+
+The Prisma schema lives in `backend/prisma/schema.prisma`.
+
+A standalone SQL migration is at `supabase-migration.sql` — run this in the Supabase SQL Editor to create tables + RLS policies manually if you prefer not using Prisma.
+
+## Deployment
+
+### Web → Vercel
+
+```bash
+cd web
+npx vercel --prod
+```
+
+Set environment variables in Vercel dashboard:
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `NEXT_PUBLIC_API_URL`
+
+### Database/Auth → Supabase
+
+Managed in the Supabase dashboard. The free tier covers THYN V1 easily.
+
+### Extension → Chrome Web Store (future)
+
+For now, load unpacked from `extension/dist/`.
+
+## FAQ
+
+**Q: Can I use this with non-LinkedIn contacts?**  
+No. THYN V1 is designed exclusively for LinkedIn profiles.
+
+**Q: Is there a mobile app?**  
+No. The web dashboard is mobile-responsive but the primary interface is the Chrome extension.
+
 ## SSOT
 
 THYN V1 is defined by a strict Source of Truth:

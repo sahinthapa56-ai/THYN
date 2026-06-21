@@ -1,12 +1,12 @@
 import type { FastifyInstance } from "fastify";
 import { authMiddleware, type AuthenticatedRequest } from "../middleware/auth.js";
+import prisma from "../lib/prisma.js";
 
 export function reminderRoutes(app: FastifyInstance) {
   app.addHook("preHandler", authMiddleware);
 
   // Create a reminder for a contact
   app.post("/", async (request: AuthenticatedRequest, reply) => {
-    const prisma = (await import("../lib/prisma.js")).default;
     const profile = await prisma.profile.findUnique({
       where: { supabaseId: request.userId },
     });
@@ -43,7 +43,6 @@ export function reminderRoutes(app: FastifyInstance) {
 
   // List reminders (all or by contact)
   app.get("/", async (request: AuthenticatedRequest, reply) => {
-    const prisma = (await import("../lib/prisma.js")).default;
     const profile = await prisma.profile.findUnique({
       where: { supabaseId: request.userId },
     });
@@ -71,7 +70,6 @@ export function reminderRoutes(app: FastifyInstance) {
 
   // Mark reminder as done
   app.put("/:id/done", async (request: AuthenticatedRequest, reply) => {
-    const prisma = (await import("../lib/prisma.js")).default;
     const profile = await prisma.profile.findUnique({
       where: { supabaseId: request.userId },
     });
@@ -90,7 +88,6 @@ export function reminderRoutes(app: FastifyInstance) {
 
   // Delete a reminder
   app.delete("/:id", async (request: AuthenticatedRequest, reply) => {
-    const prisma = (await import("../lib/prisma.js")).default;
     const profile = await prisma.profile.findUnique({
       where: { supabaseId: request.userId },
     });

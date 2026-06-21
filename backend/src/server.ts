@@ -12,7 +12,7 @@ const app = Fastify({
 });
 
 await app.register(cors, {
-  origin: config.cors.allowedOrigins,
+  origin: true,
   credentials: true,
 });
 

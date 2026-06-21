@@ -1,87 +1,77 @@
 import type { FastifyInstance } from "fastify";
-import { config } from "../config/index.js";
-import { getSupabase, getServiceSupabase } from "../services/supabase.service.js";
+import prisma from "../lib/prisma.js";
+import { getSupabase } from "../services/supabase.service.js";
 
 export function authRoutes(app: FastifyInstance) {
-  // Return Supabase OAuth config for the client
-  app.get("/providers", async () => ({
-    supabaseUrl: config.supabase.url,
-    anonKey: config.supabase.anonKey,
-  }));
+  // Return Supabase config for the client
+  app.get("/providers", async () => {
+    return {
+      supabaseUrl: process.env.SUPABASE_URL || "",
+      supabaseAnonKey: process.env.SUPABASE_ANON_KEY || "",
+    };
+  });
 
-  // Exchange a Supabase session for a local profile (upsert)
+  // Exchange Supabase session token and upsert profile
   app.post("/session", async (request, reply) => {
-    const { access_token } = request.body as { access_token?: string };
+    const { access_token } = request.body as { access_token: string };
     if (!access_token) {
-      return reply.status(400).send({ error: "access_token required" });
+      return reply.status(401).send({ error: "No access token provided" });
     }
 
-    const supabase = getSupabase();
-    const { data, error } = await supabase.auth.getUser(access_token);
-    if (error || !data.user) {
+    const {
+      data: { user },
+      error,
+    } = await getSupabase().auth.getUser(access_token);
+    if (error || !user) {
       return reply.status(401).send({ error: "Invalid token" });
     }
 
-    const su = data.user;
-    const prisma = (await import("../lib/prisma.js")).default;
-
-    let profile = await prisma.profile.findUnique({
-      where: { supabaseId: su.id },
+    // Upsert profile
+    const profile = await prisma.profile.upsert({
+      where: { email: user.email! },
+      update: {
+        name: user.user_metadata?.full_name || user.email,
+        avatar: user.user_metadata?.avatar_url,
+      },
+      create: {
+        email: user.email!,
+        name: user.user_metadata?.full_name || user.email,
+        avatar: user.user_metadata?.avatar_url,
+        supabaseId: user.id,
+      },
     });
 
-    if (!profile) {
-      profile = await prisma.profile.create({
-        data: {
-          supabaseId: su.id,
-          email: su.email || "",
-          name:
-            su.user_metadata?.full_name ||
-            su.email?.split("@")[0] ||
-            "User",
-          avatar: su.user_metadata?.avatar_url || null,
-        },
-      });
-    } else {
-      profile = await prisma.profile.update({
-        where: { id: profile.id },
-        data: {
-          email: su.email || profile.email,
-          name:
-            su.user_metadata?.full_name ||
-            su.email?.split("@")[0] ||
-            profile.name,
-          avatar: su.user_metadata?.avatar_url || profile.avatar,
-        },
-      });
-    }
-
-    return { profile, access_token };
+    return { profile, user: { id: user.id, email: user.email } };
   });
 
-  // Get current user profile from Bearer token
+  // Get current user profile
   app.get("/me", async (request, reply) => {
     const auth = request.headers.authorization;
     if (!auth?.startsWith("Bearer ")) {
-      return reply.status(401).send({ error: "Unauthorized" });
+      return reply.status(401).send({ error: "No token provided" });
     }
+    const token = auth.slice(7);
 
-    const supabase = getSupabase();
-    const { data, error } = await supabase.auth.getUser(auth.slice(7));
-    if (error || !data.user) {
+    const {
+      data: { user },
+      error,
+    } = await getSupabase().auth.getUser(token);
+    if (error || !user) {
       return reply.status(401).send({ error: "Invalid token" });
     }
 
-    const prisma = (await import("../lib/prisma.js")).default;
     const profile = await prisma.profile.findUnique({
-      where: { supabaseId: data.user.id },
+      where: { supabaseId: user.id },
     });
     if (!profile) {
       return reply.status(404).send({ error: "Profile not found" });
     }
 
-    return { user: profile };
+    return { profile };
   });
 
-  // Logout — client-side (Supabase handles session), just ack
-  app.post("/logout", async () => ({ ok: true }));
+  // Logout (just invalidates token client-side; Supabase handles the rest)
+  app.delete("/session", async (_request, reply) => {
+    return { ok: true };
+  });
 }

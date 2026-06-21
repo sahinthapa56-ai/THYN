@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { authMiddleware, type AuthenticatedRequest } from "../middleware/auth.js";
+import prisma from "../lib/prisma.js";
 
 export function contactRoutes(app: FastifyInstance) {
   // All routes require auth
@@ -7,14 +8,18 @@ export function contactRoutes(app: FastifyInstance) {
 
   // List contacts for the current user
   app.get("/", async (request: AuthenticatedRequest, reply) => {
-    const prisma = (await import("../lib/prisma.js")).default;
     const profile = await prisma.profile.findUnique({
       where: { supabaseId: request.userId },
     });
     if (!profile) return reply.status(404).send({ error: "Profile not found" });
 
+    const { linkedinUrl } = request.query as { linkedinUrl?: string };
+
+    const where: any = { profileId: profile.id };
+    if (linkedinUrl) where.linkedinUrl = linkedinUrl;
+
     const contacts = await prisma.contact.findMany({
-      where: { profileId: profile.id },
+      where,
       orderBy: { updatedAt: "desc" },
       include: { _count: { select: { notes: true, reminders: true } } },
     });
@@ -23,7 +28,6 @@ export function contactRoutes(app: FastifyInstance) {
 
   // Get a single contact
   app.get("/:id", async (request: AuthenticatedRequest, reply) => {
-    const prisma = (await import("../lib/prisma.js")).default;
     const profile = await prisma.profile.findUnique({
       where: { supabaseId: request.userId },
     });
@@ -43,7 +47,6 @@ export function contactRoutes(app: FastifyInstance) {
 
   // Create a contact from LinkedIn profile
   app.post("/", async (request: AuthenticatedRequest, reply) => {
-    const prisma = (await import("../lib/prisma.js")).default;
     const profile = await prisma.profile.findUnique({
       where: { supabaseId: request.userId },
     });
@@ -58,6 +61,7 @@ export function contactRoutes(app: FastifyInstance) {
       location,
       avatarUrl,
       summary,
+      tags,
     } = request.body as {
       linkedinUrl: string;
       name: string;
@@ -67,6 +71,7 @@ export function contactRoutes(app: FastifyInstance) {
       location?: string;
       avatarUrl?: string;
       summary?: string;
+      tags?: string[];
     };
 
     if (!linkedinUrl || !name) {
@@ -92,6 +97,7 @@ export function contactRoutes(app: FastifyInstance) {
         location,
         avatarUrl,
         summary,
+        tags: tags || [],
       },
     });
 
@@ -100,7 +106,6 @@ export function contactRoutes(app: FastifyInstance) {
 
   // Update a contact
   app.put("/:id", async (request: AuthenticatedRequest, reply) => {
-    const prisma = (await import("../lib/prisma.js")).default;
     const profile = await prisma.profile.findUnique({
       where: { supabaseId: request.userId },
     });
@@ -115,6 +120,7 @@ export function contactRoutes(app: FastifyInstance) {
       location: string;
       avatarUrl: string;
       summary: string;
+      tags: string[];
     }>;
 
     const contact = await prisma.contact.updateMany({
@@ -130,7 +136,6 @@ export function contactRoutes(app: FastifyInstance) {
 
   // Delete a contact
   app.delete("/:id", async (request: AuthenticatedRequest, reply) => {
-    const prisma = (await import("../lib/prisma.js")).default;
     const profile = await prisma.profile.findUnique({
       where: { supabaseId: request.userId },
     });

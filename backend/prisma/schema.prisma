@@ -35,6 +35,7 @@ model Contact {
   location    String?
   avatarUrl   String?
   summary     String?
+  tags        String[]
 
   notes     Note[]
   reminders Reminder[]
