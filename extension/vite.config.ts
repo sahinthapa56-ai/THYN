@@ -6,17 +6,21 @@ export default defineConfig({
   plugins: [
     react(),
     {
-      name: "remove-crossorigin",
+      name: "fix-extension-html",
       transformIndexHtml: {
         order: "post",
         handler(html) {
-          return html.replace(/ crossorigin/g, "");
+          return html
+            .replace(/ crossorigin/g, "")
+            .replace(/<link rel="modulepreload"[^>]*>/g, "");
         },
       },
     },
   ],
   build: {
     outDir: "dist",
+    cssCodeSplit: false,
+    target: "chrome109",
     rollupOptions: {
       input: {
         popup: resolve(__dirname, "src/popup/popup.html"),
@@ -27,9 +31,9 @@ export default defineConfig({
       output: {
         entryFileNames: "[name].js",
         chunkFileNames: "chunks/[name]-[hash].js",
+        manualChunks: undefined,
       },
     },
-    target: "esnext",
     minify: "esbuild",
   },
   resolve: {
