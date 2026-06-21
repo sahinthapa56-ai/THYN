@@ -1,0 +1,18 @@
+{
+  "buildCommand": "npm install",
+  "installCommand": "npm install",
+  "outputDirectory": ".",
+  "functions": {
+    "api/index.ts": {
+      "maxDuration": 30,
+      "memory": 256
+    }
+  },
+  "routes": [
+    { "src": "/health", "dest": "/api/index.ts" },
+    { "src": "/auth/(.*)", "dest": "/api/index.ts" },
+    { "src": "/contacts/(.*)", "dest": "/api/index.ts" },
+    { "src": "/notes/(.*)", "dest": "/api/index.ts" },
+    { "src": "/reminders/(.*)", "dest": "/api/index.ts" }
+  ]
+}
